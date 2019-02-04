@@ -15,7 +15,7 @@ OneWire ibutton (iButtonPin);
 byte addr[8];
 byte ReadID[8];                           // массив с данными для записи
 bool readflag = false;                    // флаг сигнализируе, что данные с ключа успечно прочианы в ардуино
-bool writeflag = false;
+bool writeflag = false;                   // режим запись/чтение
 bool preBtnPinSt = HIGH;
 
 void setup() {
@@ -52,7 +52,6 @@ byte getRWtype(){
     Serial.println("Type: RW-1990.1 ");
     return 1; // это RW-1990.1
   }
-  
   ibutton.reset(); ibutton.write(0x1D);  // проуем установить флаг записи для RW-1990.2 
   ibutton.write_bit(1);                  // записываем значение флага записи = 1 - включаем запись
   delay(10); pinMode(iButtonPin, INPUT);
@@ -68,6 +67,54 @@ byte getRWtype(){
   }
   Serial.println("Type: Unknown! ");
   return 0;                              // это неизвестный тип DS1990
+}
+
+bool write2iBtnRW1990.1(){
+  if (!ibutton.reset()) return false;
+  ibutton.write(0xD1);                    // send 0xD1 - флаг записи
+  ibutton.write_bit(0);                   // записываем значение флага записи = 0 - разрешить запись
+  delay(10); pinMode(iButtonPin, INPUT);
+  ibutton.reset(); ibutton.write(0xD5);   // команда на запись
+  for (byte i = 0; i<8; i++){
+    digitalWrite(R_Led, !digitalRead(R_Led));
+    BurnByte(ReadID[i]);
+    Serial.print('*');
+    Sd_WriteStep();
+  } 
+  ibutton.write(0xD1);    // send 0xD1 - флаг записи
+  ibutton.write_bit(1);   // записываем значение флага записи = 1 - отключаем запись
+  delay(10); pinMode(iButtonPin, INPUT);
+  return true;
+}
+
+bool write2iBtnRW1990.2(){
+  if (!ibutton.reset()) return false;
+  ibutton.write(0x1D);                    // send 0x1D - флаг записи
+  ibutton.write_bit(1);                   // записываем значение флага записи = 1
+  delay(10); pinMode(iButtonPin, INPUT);
+  ibutton.reset(); ibutton.write(0xD5);   // команда на запись
+  for (byte i = 0; i<8; i++){
+    digitalWrite(R_Led, !digitalRead(R_Led));
+    BurnByte(~ReadID[i]);
+    Serial.print('*');
+    Sd_WriteStep();
+  } 
+  ibutton.write(0x1D);                    // send 0xD1 - флаг записи
+  ibutton.write_bit(0);                   // записываем значение флага записи = 0 - отключаем запись
+  delay(10); pinMode(iButtonPin, INPUT);
+  return true;
+}
+
+bool dataIsBurningOK(){
+  byte buff[8];
+  if (!ibutton.reset()) return false;
+  ibutton.write(0x33);
+  ibutton.read_bytes(buff, 8);
+  Check = 0;
+  for (byte i = 0; i < 8; i++) 
+    if (ReadID[i] == buff[i]) Check++; // сравниваем код для записи с тем, что уже записано в ключе.
+  if (Check != 8) return false;  // если коды совпадают, ключ успешно скопирован
+  return true;
 }
 
 bool write2iBtn(){
@@ -86,58 +133,27 @@ bool write2iBtn(){
     delay(500);
     return false;
   }
-  // определяем тип RW-1990.1 или 1990.2
-  byte rwType = getRWtype();
+  byte rwType = getRWtype(); // определяем тип RW-1990.1 или 1990.2
   Serial.print("\n Burning iButton ID: ");
-  if (!ibutton.reset()) return false; 
   switch (rwType) {
     case 0: 
       Sd_ErrorBeep();
       return false;
       break;
     case 1:
-      ibutton.write(0xD1); // send 0xD1 - флаг записи
-      ibutton.write_bit(0); // записываем значение флага записи = 0
+      if (!write2iBtnRW1990.1()) return false;
       break;
     case 2:
-      ibutton.write(0x1D); // send 0x1D - флаг записи
-      ibutton.write_bit(1); // записываем значение флага записи = 1
+      if (!write2iBtnRW1990.2()) return  false;
       break;
   }
-  delay(10); pinMode(iButtonPin, INPUT);
-  ibutton.reset(); ibutton.write(0xD5); // send 0xD5
-  for (byte i = 0; i<8; i++){
-    digitalWrite(R_Led, !digitalRead(R_Led));
-    if (rwType == 1)BurnByte(ReadID[i]);
-      else BurnByte(~ReadID[i]);
-    Serial.print('*');
-    Sd_WriteStep();
-  }
-
-  switch (rwType) {
-    case 1:
-      ibutton.write(0xD1);    // send 0xD1 - флаг записи
-      ibutton.write_bit(1);   // записываем значение флага записи = 1 - отключаем запись
-      break;
-    case 2:
-      ibutton.write(0x1D);    // send 0x1D - флаг записи
-      ibutton.write_bit(0);   // записываем значение флага записи = 0 - отключаем запись
-      break;
-  }
-  delay(10); pinMode(iButtonPin, INPUT);
   digitalWrite(R_Led, HIGH);
-  ibutton.reset();
-  ibutton.write(0x33);
-  ibutton.read_bytes(addr, 8);
-  Check = 0;
-  for (byte i = 0; i < 8; i++) 
-    if (ReadID[i] == addr[i]) Check++; // сравниваем код для записи с тем, что уже записано в ключе.
-  if (Check != 8) {  // если коды совпадают, ключ успешно скопирован
+  if (!dataIsBurningOK()){
     digitalWrite(R_Led, LOW); 
     Serial.println(" The copy is faild");
     Sd_ErrorBeep();
     digitalWrite(R_Led, HIGH);
-    return false;
+    return false;    
   }
   Serial.println(" The key has copied successesfully");
   Sd_ReadOK();
@@ -158,7 +174,7 @@ void BurnByte(byte data){
 bool readiBtn(){
   for (byte i = 0; i < 8; i++) {
     Serial.print(addr[i], HEX); Serial.print(":");
-    ReadID[i] = addr[i];
+    ReadID[i] = addr[i];                               // копируем прочтенный код в ReadID
   }
   Serial.println();
   if (OneWire::crc8(addr, 7) != addr[7]) {
