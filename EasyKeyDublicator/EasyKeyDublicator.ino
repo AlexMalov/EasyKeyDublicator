@@ -3,7 +3,8 @@
 #include "analogComp.h"
 
 #define iButtonPin A5      // Линия data ibutton
-#define AC 6              // Вход аналогового компаратора 3В для Cyfral
+#define ACpinGnd 5         // Земля аналогового компаратора Cyfral
+#define ACpin 6            // Вход аналогового компаратора 3В для Cyfral
 #define BtnPin 7           // Кнопка переключения режима чтение/запись
 #define BtnPinGnd 8        // Земля кнопки переключения режима чтение/запись
 #define speakerPin 9       // Спикер, он же buzzer, он же beeper
@@ -27,6 +28,9 @@ void setup() {
   pinMode(BtnPinGnd, OUTPUT); digitalWrite(BtnPinGnd, LOW); // подключаем второй пин кнопки к земле
   pinMode(speakerPin, OUTPUT);
   pinMode(speakerPinGnd, OUTPUT); digitalWrite(speakerPinGnd, LOW); // подключаем второй пин спикера к земле
+  pinMode(ACpin, INPUT);                                            // Вход аналогового компаратора 3В для Cyfral
+  pinMode(ACpinGnd, OUTPUT); digitalWrite(ACpinGnd, LOW);           // подключаем второй пин аналогового компаратора Cyfral к земле
+  
   pinMode(R_Led, OUTPUT);
   pinMode(G_Led, OUTPUT);
   pinMode(B_Led, OUTPUT);
@@ -270,12 +274,23 @@ bool readiBtn(){
 }
 
 bool searchCifral(){
+  //pinMode(iButtonPin, INPUT_PULLUP);
+  digitalWrite(iButtonPin, LOW); pinMode(iButtonPin, OUTPUT);  //отклчаем питание от ключа
+  delay(100);
+  //analogComparator.setOn(0, iButtonPin);  // analogComparator.setOn([AIN+, AIN-]); analogComparator.waitComp([timeout]); INTERNAL_REFERENCE
+  ADCSRA &= ~(1<<ADEN);      // выключаем ADC
+  AC_REGISTER |= (1<<ACME);   //включаем AC
+  ADCSRB |= (1<<ACME);        //включаем AC
+  ADMUX = 0b00000101;        // подключаем к AC Линию A5
+  pinMode(iButtonPin, INPUT_PULLUP);
+  
   for (byte i = 0; i<8; i++){
     //addr[i] = ibutton.read();//read_bytecifral();  // поиск цифрал
-    //addr[i] = analogRead(iButtonPin) >> 2;// read_bytecifral();
-    Serial.print(analogRead(iButtonPin)); Serial.print(":");
+    addr[i] = read_bytecifral(); //analogRead(iButtonPin) >> 2
+    Serial.print(addr[i], HEX); Serial.print(":");
     //if (addr[i] == 0xFF) delay(10);  
   }
+  analogComparator.setOff();
   Serial.println();
   /*
   for (byte i = 0; i < 8; i++) {
@@ -291,24 +306,40 @@ bool searchCifral(){
 
 byte read_bytecifral(void){
   //noInterrupts();
-  long timeMks = 0; byte result = 0xFF;
+  long timeMks = 0, ti = 0; byte result = 0;//xFF;
   //pinMode(A0, INPUT_PULLUP);
-  //pinMode(iButtonPin, INPUT_PULLUP);
-  //analogComparator.setOn(INTERNAL_REFERENCE, iButtonPin);  // analogComparator.setOn([AIN+, AIN-]); analogComparator.waitComp([timeout]); INTERNAL_REFERENCE
+  bool anacompState, preState = 0;
   for (byte i = 0; i<8; i++){
+    //if (anacompState) bitSet(result, i);
+    //delayMicroseconds(10);
     timeMks = micros();
-    //if (!analogComparator.waitComp(500)) continue; 
-    //if (!analogComparator.waitComp(300)) bitClear(result, i);
-    if (analogRead(iButtonPin)>100) bitClear(result, i);
+    do {
+      anacompState = ACSR & _BV(ACO);
+      if (anacompState == 1) {
+        ti = micros();
+        do {
+          anacompState = ACSR & _BV(ACO);
+          if (anacompState == 0) {
+            ti = micros() - timeMks; 
+            break;
+          }
+        } while ((long)(micros() - ti) < 210);
+        break;
+      }
+    } while ((long)(micros() - timeMks) < 10000);
+    
+    //if (analogComparator.waitComp(300)) bitClear(result, i);
+    //analogComparator.waitComp(400);
+    //if (analogRead(iButtonPin)>100) bitClear(result, i);
     timeMks = micros() - timeMks;
     //timeMks = pulseIn(iButtonPin, LOW, 500);
     //if (timeMks == 0) continue;
-    //if (timeMks < 100) bitClear(result, i);
-    //if ((timeMks > 18)&&(timeMks < 60)) bitClear(result, i);
-    //if ((timeMks > 60) && (timeMks < 140)) bitSet(result, i);
+    //if (timeMks < 15) bitClear(result, i);
+    if ((ti > 20)&&(ti < 60)&&(timeMks < 500)) bitSet(result, i);
+    //if ((timeMks > 50) && (timeMks < 200)) bitSet(result, i);
+    //if (((timeMks < 10) || (timeMks <1000)) && (i >=0 )) return ti;//0xF1;
   }
   //interrupts();
-  analogComparator.setOff();
   return result;
 }
 
