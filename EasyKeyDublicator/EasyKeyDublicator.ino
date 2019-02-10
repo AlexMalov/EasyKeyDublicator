@@ -1,6 +1,5 @@
 #include <OneWire.h>
 #include "pitches.h"
-#include "analogComp.h"
 
 #define iButtonPin A5      // Линия data ibutton
 #define R_Led 2            // RGB Led
@@ -12,7 +11,6 @@
 #define BtnPinGnd 8        // Земля кнопки переключения режима чтение/запись
 #define speakerPin 9       // Спикер, он же buzzer, он же beeper
 #define speakerPinGnd 10    // Спикер, он же buzzer, он же beeper
-
 
 OneWire ibutton (iButtonPin); 
 byte addr[8];
@@ -237,7 +235,6 @@ bool read_cyfral(byte* buf, byte CyfralPin){
 bool searchCyfral(){
   for (byte i = 0; i < 8; i++) addr[i] = 0;
   bool rez = read_cyfral(addr, iButtonPin);
-  analogComparator.setOff();
   if (!rez) return false; 
   keyType = cyfral;
   for (byte i = 0; i < 8; i++) {
