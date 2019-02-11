@@ -161,10 +161,9 @@ bool readiBtn(){
     Serial.print(addr[i], HEX); Serial.print(":");
     ReadID[i] = addr[i];                               // копируем прочтенный код в ReadID
   }
-  Serial.println();
-  if (addr[0] == 0x01)  {                         // это ключ формата dallas
+  if (addr[0] == 0x01) {                         // это ключ формата dallas
     keyType = dallas;
-    Serial.println("Type: dallas");
+    Serial.println(" Type: Dallas");
     if (OneWire::crc8(addr, 7) != addr[7]) {
       Serial.println("CRC is not valid!");
       Sd_ErrorBeep();
@@ -195,10 +194,6 @@ unsigned long pulseAComp(bool pulse, unsigned long timeOut = 20000){  // pulse H
   return 0;
 }
 
-void ACsetOff(){
-  ACSR |= (1<<ACD); //switch off the AC
-}
-
 void ACsetOn(){
   ADCSRA &= ~(1<<ADEN);      // выключаем ADC
   ADCSRB |= (1<<ACME);        //включаем AC
@@ -207,7 +202,7 @@ void ACsetOn(){
 
 bool read_cyfral(byte* buf, byte CyfralPin){
   unsigned long ti;
-  byte j;
+  byte j = 0;
   digitalWrite(CyfralPin, LOW); pinMode(CyfralPin, OUTPUT);  //отклчаем питание от ключа
   delay(200);
   ACsetOn();    //analogComparator.setOn(0, CyfralPin); 
@@ -219,10 +214,10 @@ bool read_cyfral(byte* buf, byte CyfralPin){
     if ((ti > 50) && (ti < 200)) bitSet(buf[i >> 3], 7-j);
     j++; if (j>7) j=0; 
   }
-  ACsetOff();
   if (ti == 0) return false;
   if ((buf[0] >> 4) != 0b1110) return false;   /// not Cyfral
   byte test;
+  
   for (byte i = 1; i<4; i++){
     test = buf[i] >> 4;
     if ((test != 1)&&(test != 2)&&(test != 4)&&(test != 8)) return false;
@@ -241,7 +236,7 @@ bool searchCyfral(){
     Serial.print(addr[i], HEX); Serial.print(":");
     ReadID[i] = addr[i];                               // копируем прочтенный код в ReadID
   }
-  Serial.println("Type: Cyfral ");
+  Serial.println(" Type: Cyfral ");
   return true;  
 }
 
@@ -270,7 +265,7 @@ void loop() {
     readflag = true;
     clearLed(); digitalWrite(G_Led, HIGH);
   }
- // goto l1;
+  //goto l1;
   if (!ibutton.search(addr)) {  // запускаем поиск dallas
     ibutton.reset_search();
     delay(200);
