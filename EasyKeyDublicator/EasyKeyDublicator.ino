@@ -48,32 +48,31 @@ emRWType getRWtype(){
   // RW1990_1 - dallas-совместимые RW-1990, RW-1990.1, ТМ-08, ТМ-08v2 
   // RW1990_2 - dallas-совместимая RW-1990.2
   // TM2004 - dallas-совместимая TM2004 в доп. памятью 1кб
-  //if (writeflag){
-    // пробуем определить RW-1990.1
-    ibutton.reset(); ibutton.write(0xD1); // проуем снять флаг записи для RW-1990.1
-    ibutton.write_bit(1);                 // записываем значение флага записи = 1 - отключаем запись
+  // пробуем определить RW-1990.1
+  ibutton.reset(); ibutton.write(0xD1); // проуем снять флаг записи для RW-1990.1
+  ibutton.write_bit(1);                 // записываем значение флага записи = 1 - отключаем запись
+  delay(10); pinMode(iButtonPin, INPUT);
+  ibutton.reset(); ibutton.write(0xB5); // send 0xB5 - запрос на чтение флага записи
+  answer = ibutton.read();
+  //Serial.print("\n Answer RW-1990.1: "); Serial.println(answer, HEX);
+  if (answer == 0xFE){
+    Serial.println(" Type: dallas RW-1990.1 ");
+    return RW1990_1;            // это RW-1990.1
+  }
+  // пробуем определить RW-1990.2
+  ibutton.reset(); ibutton.write(0x1D);  // проуем установить флаг записи для RW-1990.2 
+  ibutton.write_bit(1);                  // записываем значение флага записи = 1 - включаем запись
+  delay(10); pinMode(iButtonPin, INPUT);
+  ibutton.reset(); ibutton.write(0x1E);  // send 0x1E - запрос на чтение флага записи
+  answer = ibutton.read();
+  //Serial.print("\n Answer RW-1990.2: "); Serial.println(answer, HEX);
+  if (answer == 0xFE){
+    ibutton.reset(); ibutton.write(0x1D); // возвращаем оратно запрет записи для RW-1990.2
+    ibutton.write_bit(0);                 // записываем значение флага записи = 0 - выключаем запись
     delay(10); pinMode(iButtonPin, INPUT);
-    ibutton.reset(); ibutton.write(0xB5); // send 0xB5 - запрос на чтение флага записи
-    answer = ibutton.read();
-    //Serial.print("\n Answer RW-1990.1: "); Serial.println(answer, HEX);
-    if (answer == 0xFE){
-      Serial.println(" Type: dallas RW-1990.1 ");
-      return RW1990_1;            // это RW-1990.1
-    }
-    // пробуем определить RW-1990.2
-    ibutton.reset(); ibutton.write(0x1D);  // проуем установить флаг записи для RW-1990.2 
-    ibutton.write_bit(1);                  // записываем значение флага записи = 1 - включаем запись
-    delay(10); pinMode(iButtonPin, INPUT);
-    ibutton.reset(); ibutton.write(0x1E);  // send 0x1E - запрос на чтение флага записи
-    answer = ibutton.read();
-    //Serial.print("\n Answer RW-1990.2: "); Serial.println(answer, HEX);
-    if (answer == 0xFE){
-      ibutton.reset(); ibutton.write(0x1D); // возвращаем оратно запрет записи для RW-1990.2
-      ibutton.write_bit(0);                 // записываем значение флага записи = 0 - выключаем запись
-      delay(10); pinMode(iButtonPin, INPUT);
-      Serial.println(" Type: dallas RW-1990.2 ");
-      return RW1990_2; // это RW-1990.2
-    }
+    Serial.println(" Type: dallas RW-1990.2 ");
+    return RW1990_2; // это RW-1990.2
+  }
   //}
   // пробуем определить TM-2004
   ibutton.reset(); ibutton.write(0x33);                     // посылаем команду чтения ROM для перевода в расширенный 3-х байтовый режим
@@ -87,16 +86,17 @@ emRWType getRWtype(){
     answer = ibutton.read();                                  // читаем регистр статуса
     //Serial.print(" status: "); Serial.println(answer, HEX);
     Serial.println(" Type: dallas TM2004");
+    ibutton.reset();
     return TM2004; // это Type: TM2004
   }
+  ibutton.reset();
   Serial.println(" Type: dallas unknown, trying TM-01! ");
   return TM01;                              // это неизвестный тип DS1990, нужно перебирать алгоритмы записи (TM-01)
 }
 
 bool write2iBtnTM2004(){                // функция записи на TM2004
   byte answer; bool result = true;
-  ibutton.reset(); ibutton.write(0x33);                     // посылаем команду чтения ROM для перевода в расширенный 3-х байтовый режим
-  for (byte i=0; i<8; i++) ibutton.read();                 //читаем данные ключа
+  ibutton.reset();
   ibutton.write(0x3C);                                      // команда записи ROM для TM-2004    
   ibutton.write(0x00); ibutton.write(0x00);                 // передаем адрес с которого начинается запись
   for (byte i = 0; i<8; i++){
@@ -108,7 +108,7 @@ bool write2iBtnTM2004(){                // функция записи на TM20
     pinMode(iButtonPin, INPUT);
     Serial.print('*');
     Sd_WriteStep();
-    if (keyID[i] != ibutton.read()) {result = false; break;}    //читаем записанный байт и сравниваем, с тем что должно записаться
+    if (keyID[i] != ibutton.read()) { result = false; break;}    //читаем записанный байт и сравниваем, с тем что должно записаться
   } 
   if (!result){
     ibutton.reset();
@@ -230,6 +230,8 @@ bool readiBtn(){
     Sd_ReadOK();
     return true;
   }
+  if ((addr[0]>>4) == 0x0E) Serial.println(" Type: unknown family dallas. May be cyfral in dallas key.");
+    else Serial.println(" Type: unknown family dallas");
   keyType = keyUnknown;
   return true;
 }
